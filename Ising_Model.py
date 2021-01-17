@@ -4,7 +4,9 @@ from matplotlib import pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
-
+import copy
+from timeit import timeit
+import sys
 
 #params
 WIDTH = 50
@@ -15,7 +17,7 @@ vals = np.array([RED,BLUE])
 cmap = ListedColormap(vals)
 
 class Lattice:
-    def __init__(self,WIDTH:int,HEIGHT:int,T:float,UP_COLOUR:list,DOWN_COLOUR:list):
+    def __init__(self,WIDTH:int,HEIGHT:int,T:float):
         """
         default constructor for the lattice, initialise with
 
@@ -33,15 +35,20 @@ class Lattice:
         self._Y = HEIGHT        
         #generate a random spin lattice of -1 and 1
         #first generate a random int array of 0s and 1s of size WIDTH,HEIGHT
-        self._spins = self.create_lattice()
+        self._spins = self.create_lattice("random")
         #replace 0 with -1
         self._spins = np.where(self._spins==0,-1,self._spins)
         #define the colour map for drawing the array
-        self.cmap = ListedColormap(np.array([DOWN_COLOUR,UP_COLOUR]))
+        self.cache = []
         self.T = T
 
-    def create_lattice(self):
-        return np.random.randint(2,size=(self._Y,self._X))
+    def create_lattice(self,method):
+        if(method.lower() == "up"):
+            return np.ones((self._Y,self._X))
+        elif(method.lower() == "down"):
+            return -np.ones((self._Y,self._X))
+        elif(method.lower() == "random"):
+            return np.random.randint(2,size=(self._Y,self._X))
 
     def __iter__(self):
         return iter(self._spins)
@@ -83,20 +90,10 @@ class Lattice:
         spin = self._spins[y,x]
         neighbours = self.get_neighbours(x,y)
 
-        #determine initial energy pre spin-flip
-        E_i = 0
-        for neighbour in neighbours:
-            E_i+=-spin*neighbour
-        #flip the spin
-        spin*=-1
-        #determine the new energy
-        E_f = 0
-        for neighbour in neighbours:
-            E_f+=-spin*neighbour
-        return E_f-E_i
+        return 2*spin*sum(neighbours)
 
-    def metropolis(self):
-        """obtain a set of states from the Boltzmann distribution using the Metropolis Algorithm and Markov Chains"""
+    def glauber_step(self):
+        """obtain a set of states from the Boltzmann distribution using the glauber method"""
         #choose a random spin within the grid
         x = random.randrange(self._X)
         y = random.randrange(self._Y)
@@ -108,18 +105,56 @@ class Lattice:
             self._spins[y,x]*=-1
         return self._spins
         
-    def systematic_metropolis(self):
-        """the same functionality as metropolis function, but for each spin in the state"""
-        for y in range(self._Y):
-            for x in range(self._X):
-                dE = self.calc_delta_energy(x,y)
-                #the probability that the spin should flip
-                p = min(1,np.exp(-dE/self.T))
-                if(random.random()<p):
-                    #flip the spin based on the determined probability
-                    self._spins[y,x]*=-1
+    def glauber_sweep(self):
+        """completes a whole sweep of the glauber method"""
+        for i in range(self._X*self._Y):
+            self.glauber_step()
         return self._spins
 
+    def sim_glauber(self,runs):
+        """
+        simulates the glauber method and caches the states
+        """
+        for r in range(runs):
+            self.cache.append(copy.copy(self.glauber_sweep()))
+    
+    def kawasaki_step(self):
+        """obtain a state based off the kawasaki method"""
+        #obtain a first random point
+        x1 = random.randrange(self._X)
+        y1 = random.randrange(self._Y)
+        spin1 = self._spins[y1,x1]
+        #find a second random point with a different spin
+        spin2=spin1
+        while(spin2==spin1):
+            x2 = random.randrange(self._X)
+            y2 = random.randrange(self._Y)
+            spin2=self._spins[y2,x2]
+        #determine the change in energy
+        dE = self.calc_delta_energy(x1,y1)+self.calc_delta_energy(x2,y2)
+        #check if the two points are neighbours
+        if((abs(x2-x1)==1 and y2==y1) or (abs(y2-y1)==1 and x2==x1)):
+            #account for the two spins being neighbours
+            dE+=4*spin2*spin1
+        p = min(1,np.exp(-dE/self.T))
+        if(random.random()<p):
+            #flip the spin based on the determined probability
+            self._spins[y1,x1]*=-1
+            self._spins[y2,x2]*=-1
+        return self._spins
+
+    def kawasaki_sweep(self):
+        """completes a whole sweep of the kawasaki method"""
+        for i in range(self._X*self._Y):
+            self.kawasaki_step()
+        return self._spins
+
+    def sim_kawasaki(self,runs):
+        """
+        simulates the kawasaki method and caches the states
+        """
+        for r in range(runs):
+            self.cache.append(copy.copy(self.kawasaki_sweep()))
 
     def calc_total_energy(self):
         """
@@ -134,25 +169,45 @@ class Lattice:
                     energy+=-self._spins[y,x]*neighbour
         return energy
 
-    def draw(self):
+    def draw(self,UP_COLOUR:list,DOWN_COLOUR:list):
         """
         Draws the lattice in its current state
         """
+        cols = ListedColormap(np.array([DOWN_COLOUR,UP_COLOUR]))
         fig,ax = plt.subplots()
-        ax.pcolormesh(self._spins,cmap = self.cmap)
-        plt.show()
-    def anim(self):
-        fig,ax = plt.subplots()
-        im = plt.imshow(self._spins,cmap=self.cmap)
-        def animate(i):
-            im.set_array(self.systematic_metropolis())
-            return im,
-
-        a = animation.FuncAnimation(fig,animate,interval=1)
+        ax.pcolormesh(self._spins,cmap = cols)
         plt.show()
 
-    
+
+    def anim(self,UP_COLOUR:list,DOWN_COLOUR:list,steps):
+        if(len(self.cache)>0):
+            cols = ListedColormap(np.array([DOWN_COLOUR,UP_COLOUR]))
+            fig,ax = plt.subplots()
+            im = ax.imshow(self.cache[0],cmap=cols)
+            def animate(i):
+                im.set_array(self.cache[i])
+                return im,
+
+            a = animation.FuncAnimation(fig,animate,frames=steps,interval=1)
+            plt.show()
+            a.save("sim.gif",fps=60)
+        else:
+            print("Make sure to run a simulation first")
 
 
-L = Lattice(50,50,1,[0,0,1,1],[1,0,0,1])
-L.anim()
+def main():
+    if(len(sys.argv[1:])!=4):
+        raise TypeError(f"Missing {4-len(sys.argv[1:])} required positional arguments: lx, ly, T, dynamics(G/K)")
+    lx = int(sys.argv[1])
+    ly = int(sys.argv[2])
+    T = float(sys.argv[3])
+    Dynamic = sys.argv[4]
+    L = Lattice(lx,ly,T)
+    if Dynamic=="G":
+        L.sim_glauber(360)
+    elif Dynamic=="K":
+        L.sim_kawasaki(360)
+    L.anim([0,0,1,1],[1,0,0,1],360)
+
+if __name__ == "__main__":
+    main()
