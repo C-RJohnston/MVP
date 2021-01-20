@@ -8,16 +8,9 @@ import copy
 from timeit import timeit
 import sys
 
-#params
-WIDTH = 50
-HEIGHT = 50
-RED = [1,0,0,1]
-BLUE = [0,0,1,1]
-vals = np.array([RED,BLUE])
-cmap = ListedColormap(vals)
 
 class Lattice:
-    def __init__(self,WIDTH:int,HEIGHT:int,T:float):
+    def __init__(self,WIDTH:int,HEIGHT:int,T:float,INITIAL = "random"):
         """
         default constructor for the lattice, initialise with
 
@@ -27,19 +20,19 @@ class Lattice:
 
         T: Temperature of the system
 
-        UP_COLOUR: colour with which the up spin is drawn
-
-        DOWN_COLOUR: colour with which the down spin is drawn
+        INITIAL: how to generate the initial conditions of the lattice (all up, all down, random)
         """
         self._X = WIDTH
         self._Y = HEIGHT        
         #generate a random spin lattice of -1 and 1
         #first generate a random int array of 0s and 1s of size WIDTH,HEIGHT
-        self._spins = self.create_lattice("random")
+        self._spins = self.create_lattice(INITIAL)
         #replace 0 with -1
         self._spins = np.where(self._spins==0,-1,self._spins)
         #define the colour map for drawing the array
         self.cache = []
+        self.E = []
+        self.M = []
         self.T = T
 
     def create_lattice(self,method):
@@ -50,14 +43,20 @@ class Lattice:
         elif(method.lower() == "random"):
             return np.random.randint(2,size=(self._Y,self._X))
 
+    def size(self):
+        return self._X*self._Y
     def __iter__(self):
         return iter(self._spins)
     def __getitem__(self,index):
         return self._spins[index]
-    def __str__(self):
+    def __repr__(self):
         unique, counts = np.unique(self._spins, return_counts=True)
         u = dict(zip(unique, counts))
-        return f"Lattice of size ({self._X},{self._Y})\nEnergy (arb units): {self.calc_total_energy()}\nNo. Up spins: {u[1]}\nNo. Down spins:{u[-1]}"
+        return f"""Lattice of size ({self._X},{self._Y})
+        Magnetisation: {self.calc_total_magnetisation()}
+        Energy: {self.calc_total_energy()}
+        No. Up spins: {u[1]}
+        No. Down spins:{u[-1]}"""
 
     def get_neighbours(self,x,y):
         #gets the on-lattice neighbours for spin(x,y) using periodic boundaries
@@ -111,12 +110,18 @@ class Lattice:
             self.glauber_step()
         return self._spins
 
-    def sim_glauber(self,runs):
+    def sim_glauber(self,runs,cache=False):
         """
         simulates the glauber method and caches the states
         """
         for r in range(runs):
-            self.cache.append(copy.copy(self.glauber_sweep()))
+            if cache:
+                self.glauber_sweep()
+                self.cache.append(copy.copy(self._spins))
+                self.E.append(self.calc_total_energy())
+                self.M.append(self.calc_total_magnetisation())
+            else:
+                self.glauber_sweep()
     
     def kawasaki_step(self):
         """obtain a state based off the kawasaki method"""
@@ -149,12 +154,18 @@ class Lattice:
             self.kawasaki_step()
         return self._spins
 
-    def sim_kawasaki(self,runs):
+    def sim_kawasaki(self,runs,cache=False):
         """
         simulates the kawasaki method and caches the states
         """
         for r in range(runs):
-            self.cache.append(copy.copy(self.kawasaki_sweep()))
+            if cache:
+                self.kawasaki_sweep()
+                self.cache.append(copy.copy(self._spins))
+                self.E.append(self.calc_total_energy())
+                self.M.append(self.calc_total_magnetisation())
+            else:
+                self.kawasaki_sweep()
 
     def calc_total_energy(self):
         """
@@ -168,6 +179,23 @@ class Lattice:
                 for neighbour in neighbours:
                     energy+=-self._spins[y,x]*neighbour
         return energy
+
+    def calc_total_magnetisation(self):
+        """
+        calculates the total magnetisation of the current state of the lattice using
+        M = sum(spins)
+        """
+        return sum(sum(self._spins))
+    
+    def calc_average_magnetisation(self):
+        """
+        returns the magnetisation per number of spins
+        """
+        N = self._X*self._Y
+        return self.calc_total_magnetisation()/N
+
+    def get_measurements(self):
+        return self.E,self.M
 
     def draw(self,UP_COLOUR:list,DOWN_COLOUR:list):
         """
@@ -208,6 +236,7 @@ def main():
     elif Dynamic=="K":
         L.sim_kawasaki(360)
     L.anim([0,0,1,1],[1,0,0,1],360)
+    print(L)
 
 if __name__ == "__main__":
     main()
