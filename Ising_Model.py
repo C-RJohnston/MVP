@@ -71,6 +71,23 @@ class Lattice:
             neighbours.append(self._spins[y+1,x])
         return neighbours
 
+    def is_neighbour(self,x1,y1,x2,y2):
+        """
+        Returns true if (x1,y1) and (x2,y2) are neighbours using periodic boundaries
+        if the distance between the points == 1 or N and the points or on axis, then they
+        are neighbours
+        """
+        XMAX = self._X-1
+        YMAX = self._Y-1
+        sy = abs(y2-y1)
+        sx = abs(x2-x1)
+        #if the distance between x points is 1 (or lx) and the ys are aligned
+        onX = (sx==1 or sx==XMAX) and sy==0
+        #if the distance between y points is 1 (or ly) and the xs are aligned
+        onY = (sy==1 or sy==YMAX) and sx==0
+        return onX or onY
+
+
     def calc_delta_energy(self,x,y):
         """
         Calculate the change in energy of the state by flipping the given spin
@@ -110,16 +127,17 @@ class Lattice:
             self.glauber_step()
         return self._spins
 
-    def sim_glauber(self,runs,cache=False):
+    def sim_glauber(self,runs,cache=False,interval=10):
         """
         simulates the glauber method and caches the states
         """
         for r in range(runs):
             if cache:
                 self.glauber_sweep()
-                self.cache.append(copy.copy(self._spins))
-                self.E.append(self.calc_total_energy())
-                self.M.append(self.calc_total_magnetisation())
+                if(r%interval == 0):
+                    self.cache.append(copy.copy(self._spins))
+                    self.E.append(self.calc_total_energy())
+                    self.M.append(self.calc_total_magnetisation())
             else:
                 self.glauber_sweep()
     
@@ -138,7 +156,7 @@ class Lattice:
         #determine the change in energy
         dE = self.calc_delta_energy(x1,y1)+self.calc_delta_energy(x2,y2)
         #check if the two points are neighbours
-        if((abs(x2-x1)==1 and y2==y1) or (abs(y2-y1)==1 and x2==x1)):
+        if(self.is_neighbour(x1,y1,x2,y2)):
             #account for the two spins being neighbours
             dE+=4*spin2*spin1
         p = min(1,np.exp(-dE/self.T))
@@ -154,16 +172,17 @@ class Lattice:
             self.kawasaki_step()
         return self._spins
 
-    def sim_kawasaki(self,runs,cache=False):
+    def sim_kawasaki(self,runs,cache=False,interval=10):
         """
         simulates the kawasaki method and caches the states
         """
         for r in range(runs):
             if cache:
                 self.kawasaki_sweep()
-                self.cache.append(copy.copy(self._spins))
-                self.E.append(self.calc_total_energy())
-                self.M.append(self.calc_total_magnetisation())
+                if(r%interval==0):
+                    self.cache.append(copy.copy(self._spins))
+                    self.E.append(self.calc_total_energy())
+                    self.M.append(self.calc_total_magnetisation())
             else:
                 self.kawasaki_sweep()
 
@@ -221,6 +240,7 @@ class Lattice:
             a.save("sim.gif",fps=60)
         else:
             print("Make sure to run a simulation first")
+
 
 
 def main():

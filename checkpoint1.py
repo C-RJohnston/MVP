@@ -4,6 +4,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import timeit
 import json
+import time
 #params
 
 def equilibrate(states: Lattice,method: str):
@@ -27,7 +28,7 @@ def capacity(av_E,av_E2,N,T):
 
 
 def main():
-    Ts = np.linspace(1,5,20).tolist()
+    Ts = np.linspace(1,3,20).tolist()
     Ms = []
     xi = []
     Es = []
@@ -41,8 +42,8 @@ def main():
         L.sim_glauber(1000,True)
         E,M = L.get_measurements()
         del L
-        E = E[::10]
-        M = M[::10]
+        E = E
+        M = M
         av_M = np.mean(M)
         av_M2 = np.mean(np.power(M,2))
         av_E = np.mean(E)
@@ -81,7 +82,8 @@ def main():
     plt.savefig("TempVariation.png",dpi=100)
     plt.show()
 
+start = time.time()
 main()
-
+print("Time:",time.time()-start)
 
 
