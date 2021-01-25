@@ -9,6 +9,7 @@ from timeit import timeit
 import sys
 
 
+
 class Lattice:
     def __init__(self,WIDTH:int,HEIGHT:int,T:float,INITIAL = "random"):
         """
@@ -43,6 +44,7 @@ class Lattice:
         elif(method.lower() == "random"):
             return np.random.randint(2,size=(self._Y,self._X))
 
+    @property
     def size(self):
         return self._X*self._Y
     def __iter__(self):
@@ -108,6 +110,7 @@ class Lattice:
 
         return 2*spin*sum(neighbours)
 
+
     def glauber_step(self):
         """obtain a set of states from the Boltzmann distribution using the glauber method"""
         #choose a random spin within the grid
@@ -120,7 +123,7 @@ class Lattice:
             #flip the spin based on the determined probability
             self._spins[y,x]*=-1
         return self._spins
-        
+
     def glauber_sweep(self):
         """completes a whole sweep of the glauber method"""
         for i in range(self._X*self._Y):
@@ -138,6 +141,7 @@ class Lattice:
                     self.cache.append(copy.copy(self._spins))
                     self.E.append(self.calc_total_energy())
                     self.M.append(self.calc_total_magnetisation())
+                    #print(f"Temperature {self.T}: {r}/{runs}")
             else:
                 self.glauber_sweep()
     
