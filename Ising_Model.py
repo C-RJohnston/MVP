@@ -155,7 +155,8 @@ class Lattice:
                     self.M.append(self.calc_total_magnetisation())
             else:
                 self.glauber_sweep()
-        print(f"Completed Glauber temp {self.T}")
+        if cache:
+            print(f"Completed Glauber temp {self.T}")
     
     def kawasaki_step(self):
         """obtain a state based off the kawasaki method"""
@@ -203,7 +204,8 @@ class Lattice:
                     self.M.append(self.calc_total_magnetisation())
             else:
                 self.kawasaki_sweep()
-        print(f"Completed Kawasaki temp {self.T}")
+        if cache:
+            print(f"Completed Kawasaki temp {self.T}")
         
     def calc_total_energy(self):
         """

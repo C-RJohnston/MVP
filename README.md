@@ -60,6 +60,9 @@ condition of all states being up, while Kawasaki starts with all states being ra
 conditions which may improve the speed of equilibrating kawasaki, the time to bring the system up to equilibrium
 was not a noticable issue.
 
+Note that the simulate.py file uses multiprocessing to speed up the time to complete all the measurements.
+If you wish for the file to run on a single process, use the optional command line argument `-nomulti` at the end.
+
 3.1 File format
 ---------------
 The data is stored in a JSON file with the format

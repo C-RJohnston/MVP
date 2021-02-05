@@ -15,7 +15,7 @@ def equilibrate(states: Lattice,method: str):
     if method.lower() == "g" or method.lower() == "glauber":
         new.sim_glauber(100)
     elif method.lower() == "k" or method.lower() == "kawasaki":
-        new.sim_kawasaki(100)
+        new.sim_kawasaki(200)
     return new
 
 def susceptibility(av_M,av_M2,N,T):
@@ -71,14 +71,14 @@ def jacknife(measurements,value,N,T):
     return (sum([(x-chi)**2 for chi in xs]))**0.5
     
 def do_glauber(L,runs,tau):
+    print(f"Begin Glauber temp {L.T}")
     L = equilibrate(L,"glauber")
     L.sim_glauber(runs,True,tau)
     return L
 
 def mp_glauber(lx,ly,T0,Tf,NT,runs,tau):
-    print("in mp")
-    Ts = np.linspace(T0,Tf,NT).tolist()
-    Ls = [Lattice(lx,ly,T) for T in Ts]
+    Ts = np.linspace(T0,Tf,NT,False).tolist()
+    Ls = [Lattice(lx,ly,T,"up") for T in Ts]
     experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -117,7 +117,7 @@ def mp_glauber(lx,ly,T0,Tf,NT,runs,tau):
     
 
 def glauber(lx,ly,T0,Tf,NT,runs,tau):
-    Ts = np.linspace(T0,Tf,NT).tolist()
+    Ts = np.linspace(T0,Tf,NT,False).tolist()
     experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
     i=0
     for T in Ts:
@@ -154,12 +154,13 @@ def glauber(lx,ly,T0,Tf,NT,runs,tau):
         json.dump(experiment,outfile)
 
 def do_kawasaki(L,runs,tau):
+    print(f"Begin Kawasaki temp {L.T}")
     L = equilibrate(L,"kawasaki")
     L.sim_kawasaki(runs,True,tau)
     return L
 
 def mp_kawasaki(lx,ly,T0,Tf,NT,runs,tau):
-    Ts = np.linspace(T0,Tf,NT).tolist()
+    Ts = np.linspace(T0,Tf,NT,False).tolist()
     Ls = [Lattice(lx,ly,T) for T in Ts]
     experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
 
@@ -182,11 +183,11 @@ def mp_kawasaki(lx,ly,T0,Tf,NT,runs,tau):
              "C_jerror":C_jerror,}
             experiment['measurements'][i] = x
             i+=1
-    with open("Glauber_Data.json",'w') as outfile:
+    with open("Kawasaki_Data.json",'w') as outfile:
         json.dump(experiment,outfile)
 
 def kawasaki(lx,ly,T0,Tf,NT,runs,tau):
-    Ts = np.linspace(T0,Tf,NT).tolist()
+    Ts = np.linspace(T0,Tf,NT,False).tolist()
     experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
     i=0
     for T in Ts:
@@ -214,10 +215,17 @@ def kawasaki(lx,ly,T0,Tf,NT,runs,tau):
     
 
 def main():
-    t = time.perf_counter()
-    mp_glauber(*[int(x) for x in sys.argv[1:8]])
-    mp_kawasaki(*[int(x) for x in sys.argv[1:8]])
-    print(time.perf_counter()-t)
+    try: 
+        if(sys.argv[8] == "-nomulti"):
+            t = time.perf_counter()
+            glauber(*[int(x) for x in sys.argv[1:8]])
+            kawasaki(*[int(x) for x in sys.argv[1:8]])
+            print(f"time to complete: {(time.perf_counter()-t)/60} minutes (which is {(time.perf_counter()-t)/3600} hours)")
+    except:
+        t = time.perf_counter()
+        mp_glauber(*[int(x) for x in sys.argv[1:8]])
+        mp_kawasaki(*[int(x) for x in sys.argv[1:8]])
+        print(f"time to complete: {(time.perf_counter()-t)/60} minutes (which is {(time.perf_counter()-t)/3600} hours)")
 
 if __name__ == "__main__":
     main()
