@@ -63,6 +63,7 @@ was not a noticable issue.
 3.1 File format
 ---------------
 The data is stored in a JSON file with the format
+```
 {
 parameters:
 {
@@ -78,6 +79,7 @@ critical temperature:
 	critical temperature determined from measurements
 }
 }
+```
 n.b. the critical temperature values will not appear until after running plot.py
 4. Plotting results
 -------------------
