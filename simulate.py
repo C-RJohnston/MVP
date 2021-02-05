@@ -1,12 +1,11 @@
 from Ising_Model import Lattice
 import copy
 import numpy as np
-from matplotlib import pyplot as plt
-import timeit
 import json
+import sys
+import concurrent.futures
+import itertools
 import time
-#params
-
 def equilibrate(states: Lattice,method: str):
     """
     returns a lattice that has been allowed to reach equilibrium (100 sweeps) using either
@@ -44,7 +43,7 @@ def bootstrap(measurements,value,k,N,T):
     k: number of times to resample
     """
     xs = []
-    for i in range(k):
+    for _ in range(k):
         resamples = np.random.choice(measurements,len(measurements))
         mean = np.mean(resamples)
         square_mean = np.mean(np.power(resamples,2))
@@ -64,34 +63,74 @@ def jacknife(measurements,value,N,T):
     square_mean = np.mean(np.power(measurements,2))
     x = value(mean,square_mean,N,T)
     xs = []
-    for i in range(measurements):
+    for i in range(len(measurements)):
         new = np.delete(measurements,i)
         mean = np.mean(new)
-        square_mean = np.mean(np.power(new))
+        square_mean = np.mean(np.power(new,2))
         xs.append(value(mean,square_mean,N,T))
-    return (sum([(x-xi)**2 for xi in xs]))**0.5
+    return (sum([(x-chi)**2 for chi in xs]))**0.5
+    
+def do_glauber(L,runs,tau):
+    L = equilibrate(L,"glauber")
+    L.sim_glauber(runs,True,tau)
+    return L
+
+def mp_glauber(lx,ly,T0,Tf,NT,runs,tau):
+    print("in mp")
+    Ts = np.linspace(T0,Tf,NT).tolist()
+    Ls = [Lattice(lx,ly,T) for T in Ts]
+    experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(do_glauber,Ls,itertools.repeat(runs,len(Ls)),itertools.repeat(tau,len(Ls)))
+        i=0
+        for L in results:
+            E,M = L.get_measurements()
+            E_mean = float(np.mean(E))
+            E_square_mean = float(np.mean(np.power(E,2)))
+            M_mean = float(np.mean(np.absolute(M)))
+            M_square_mean = float(np.mean(np.power(M,2)))
+            C = float(capacity(E_mean,E_square_mean,experiment["params"]["N"],L.T))
+            chi = float(susceptibility(M_mean,M_square_mean,experiment["params"]["N"],L.T))
+            E_error = error(E_mean,E_square_mean,experiment["params"]["N"])
+            M_error = error(M_mean,M_square_mean,experiment["params"]["N"])
+            C_berror = bootstrap(E,capacity,1000,experiment["params"]["N"],L.T)
+            chi_berror = bootstrap(M,susceptibility,1000,experiment["params"]["N"],L.T)
+            C_jerror = jacknife(E,capacity,experiment["params"]["N"],L.T)
+            chi_jerror = jacknife(M,susceptibility,experiment["params"]["N"],L.T)
+            x = {"T": L.T,
+             "E_mean": E_mean,
+             "M_mean": M_mean,
+             "C":C,
+             "chi":chi,
+             "E_error":E_error,
+             "M_error":M_error,
+             "C_berror":C_berror,
+             "chi_berror":chi_berror,
+             "C_jerror":C_jerror,
+             "chi_jerror":chi_jerror}
+            experiment['measurements'][i] = x
+            i+=1
+    with open("Glauber_Data.json",'w') as outfile:
+        json.dump(experiment,outfile)
+
     
 
-def main():
-    Ts = np.linspace(1,3,20).tolist()
-    lx,ly = 50,50
-    experiment = {"params": {"N":lx*ly,"tau":10},"measurements":{}}
-    Ms = []
-    xi = []
-    Es = []
-    C = []
+def glauber(lx,ly,T0,Tf,NT,runs,tau):
+    Ts = np.linspace(T0,Tf,NT).tolist()
+    experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
     i=0
     for T in Ts:
         L = Lattice(lx,ly,T,"up")
         L = equilibrate(L,"glauber")
-        L.sim_glauber(10_000,True)
+        L.sim_glauber(runs,True,tau)
         E,M = L.get_measurements()
         measurement = {"T":T,"E":np.array(E),"M":np.absolute(np.array(M))}
         experiment["measurements"][i] = measurement
         del L
         i+=1
-        print("completed temp",f"{i}/20")
-    for index,measurement in experiment["measurements"].items():
+        print(f"Glauber: {i}/{NT}")
+    for measurement in experiment["measurements"].values():
         E = measurement["E"]
         E_mean = np.mean(E)
         E_square_mean = np.mean(np.power(E,2))
@@ -101,20 +140,85 @@ def main():
         measurement["E_mean"] = float(E_mean)
         measurement["M_mean"] = float(M_mean)
         measurement["C"] = float(capacity(E_mean,E_square_mean,experiment["params"]["N"],measurement["T"]))
-        measurement["xi"] = float(susceptibility(M_mean,M_square_mean,experiment["params"]["N"],measurement["T"]))
+        measurement["chi"] = float(susceptibility(M_mean,M_square_mean,experiment["params"]["N"],measurement["T"]))
         measurement["E_error"] = error(E_mean,E_square_mean,experiment["params"]["N"])
         measurement["M_error"] = error(M_mean,M_square_mean,experiment["params"]["N"])
         measurement["C_berror"]=bootstrap(E,capacity,1000,experiment["params"]["N"],measurement["T"])
-        measurement["xi_berror"]=bootstrap(M,susceptibility,1000,experiment["params"]["N"],measurement["T"])
-        measurement["C_jerror"]=jacknife(E,capacity,1000,experiment["params"]["N"],measurement["T"])
-        measurement["xi_jerror"]=jacknife(M,susceptibility,1000,experiment["params"]["N"],measurement["T"])
+        measurement["chi_berror"]=bootstrap(M,susceptibility,1000,experiment["params"]["N"],measurement["T"])
+        measurement["C_jerror"]=jacknife(E,capacity,experiment["params"]["N"],measurement["T"])
+        measurement["chi_jerror"]=jacknife(M,susceptibility,experiment["params"]["N"],measurement["T"])
         del measurement["E"]
         del measurement["M"]
 
-    with open("Data.json",'w') as outfile:
+    with open("Glauber_Data.json",'w') as outfile:
         json.dump(experiment,outfile)
 
-start = time.time()
-main()
-print("Time:",time.time()-start)
+def do_kawasaki(L,runs,tau):
+    L = equilibrate(L,"kawasaki")
+    L.sim_kawasaki(runs,True,tau)
+    return L
 
+def mp_kawasaki(lx,ly,T0,Tf,NT,runs,tau):
+    Ts = np.linspace(T0,Tf,NT).tolist()
+    Ls = [Lattice(lx,ly,T) for T in Ts]
+    experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(do_kawasaki,Ls,itertools.repeat(runs,len(Ls)),itertools.repeat(tau,len(Ls)))
+        i=0
+        for L in results:
+            E = L.get_measurements()[0]
+            E_mean = float(np.mean(E))
+            E_square_mean = float(np.mean(np.power(E,2)))
+            C = float(capacity(E_mean,E_square_mean,experiment["params"]["N"],L.T))
+            E_error = error(E_mean,E_square_mean,experiment["params"]["N"])
+            C_berror = bootstrap(E,capacity,1000,experiment["params"]["N"],L.T)
+            C_jerror = jacknife(E,capacity,experiment["params"]["N"],L.T)
+            x = {"T": L.T,
+             "E_mean": E_mean,
+             "C":C,
+             "E_error":E_error,
+             "C_berror":C_berror,
+             "C_jerror":C_jerror,}
+            experiment['measurements'][i] = x
+            i+=1
+    with open("Glauber_Data.json",'w') as outfile:
+        json.dump(experiment,outfile)
+
+def kawasaki(lx,ly,T0,Tf,NT,runs,tau):
+    Ts = np.linspace(T0,Tf,NT).tolist()
+    experiment = {"params": {"N":lx*ly,"tau":tau},"measurements":{}}
+    i=0
+    for T in Ts:
+        L = Lattice(lx,ly,T,"random")
+        L = equilibrate(L,"kawasaki")
+        L.sim_kawasaki(runs,True,tau)
+        E= L.get_measurements()[0]
+        measurement = {"T":T,"E":np.array(E)}
+        experiment["measurements"][i] = measurement
+        del L
+        i+=1
+        print(f"Kawasaki: {i}/{NT}")
+    for measurement in experiment["measurements"].values():
+        E = measurement["E"]
+        E_mean = np.mean(E)
+        E_square_mean = np.mean(np.power(E,2))
+        measurement["E_mean"] = float(E_mean)
+        measurement["C"] = float(capacity(E_mean,E_square_mean,experiment["params"]["N"],measurement["T"]))
+        measurement["E_error"] = error(E_mean,E_square_mean,experiment["params"]["N"])
+        measurement["C_berror"]=bootstrap(E,capacity,1000,experiment["params"]["N"],measurement["T"])
+        measurement["C_jerror"]=jacknife(E,capacity,experiment["params"]["N"],measurement["T"])
+        del measurement["E"]
+    with open("Kawasaki_Data.json",'w') as outfile:
+        json.dump(experiment,outfile)
+    
+
+def main():
+    t = time.perf_counter()
+    mp_glauber(*[int(x) for x in sys.argv[1:8]])
+    mp_kawasaki(*[int(x) for x in sys.argv[1:8]])
+    print(time.perf_counter()-t)
+
+if __name__ == "__main__":
+    main()
+    

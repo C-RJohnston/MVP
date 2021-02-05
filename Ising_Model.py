@@ -2,13 +2,21 @@ import random
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import cm
+import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
 from matplotlib import animation
 import copy
-from timeit import timeit
 import sys
 
+def progress(count, total, status=''):
+    bar_len = 60
+    filled_len = int(round(bar_len * count / float(total)))
 
+    percents = round(100.0 * count / float(total), 1)
+    bar = '=' * filled_len + '-' * (bar_len - filled_len)
+
+    sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', status))
+    sys.stdout.flush()
 
 class Lattice:
     def __init__(self,WIDTH:int,HEIGHT:int,T:float,INITIAL = "random"):
@@ -35,6 +43,8 @@ class Lattice:
         self.E = []
         self.M = []
         self.T = T
+        self.title = ""
+        self.ID = random.random()
 
     def create_lattice(self,method):
         if(method.lower() == "up"):
@@ -57,8 +67,8 @@ class Lattice:
         return f"""Lattice of size ({self._X},{self._Y})
         Magnetisation: {self.calc_total_magnetisation()}
         Energy: {self.calc_total_energy()}
-        No. Up spins: {u[1]}
-        No. Down spins:{u[-1]}"""
+        No. Up spins: {u[1.0]}
+        No. Down spins:{u.get(-1.0,0)}"""
 
     def get_neighbours(self,x,y):
         #gets the on-lattice neighbours for spin(x,y) using periodic boundaries
@@ -126,7 +136,7 @@ class Lattice:
 
     def glauber_sweep(self):
         """completes a whole sweep of the glauber method"""
-        for i in range(self._X*self._Y):
+        for _ in range(self._X*self._Y):
             self.glauber_step()
         return self._spins
 
@@ -134,16 +144,18 @@ class Lattice:
         """
         simulates the glauber method and caches the states
         """
+        self.title = "Glauber"
         for r in range(runs):
+            #progress(r,runs)
             if cache:
                 self.glauber_sweep()
                 if(r%interval == 0):
                     self.cache.append(copy.copy(self._spins))
                     self.E.append(self.calc_total_energy())
                     self.M.append(self.calc_total_magnetisation())
-                    #print(f"Temperature {self.T}: {r}/{runs}")
             else:
                 self.glauber_sweep()
+        print(f"Completed Glauber temp {self.T}")
     
     def kawasaki_step(self):
         """obtain a state based off the kawasaki method"""
@@ -172,7 +184,7 @@ class Lattice:
 
     def kawasaki_sweep(self):
         """completes a whole sweep of the kawasaki method"""
-        for i in range(self._X*self._Y):
+        for _ in range(self._X*self._Y):
             self.kawasaki_step()
         return self._spins
 
@@ -180,7 +192,9 @@ class Lattice:
         """
         simulates the kawasaki method and caches the states
         """
+        self.title = "Kawasaki"
         for r in range(runs):
+            #progress(r,runs)
             if cache:
                 self.kawasaki_sweep()
                 if(r%interval==0):
@@ -189,7 +203,8 @@ class Lattice:
                     self.M.append(self.calc_total_magnetisation())
             else:
                 self.kawasaki_sweep()
-
+        print(f"Completed Kawasaki temp {self.T}")
+        
     def calc_total_energy(self):
         """
         Calculates the total energy of the state
@@ -202,7 +217,6 @@ class Lattice:
                 for neighbour in neighbours:
                     energy+=-self._spins[y,x]*neighbour
         return energy
-
     def calc_total_magnetisation(self):
         """
         calculates the total magnetisation of the current state of the lattice using
@@ -225,7 +239,7 @@ class Lattice:
         Draws the lattice in its current state
         """
         cols = ListedColormap(np.array([DOWN_COLOUR,UP_COLOUR]))
-        fig,ax = plt.subplots()
+        ax = plt.subplots()[1]
         ax.pcolormesh(self._spins,cmap = cols)
         plt.show()
 
@@ -234,6 +248,12 @@ class Lattice:
         if(len(self.cache)>0):
             cols = ListedColormap(np.array([DOWN_COLOUR,UP_COLOUR]))
             fig,ax = plt.subplots()
+            ax.set_title(self.title)
+            ax.axes.xaxis.set_visible(False)
+            ax.axes.yaxis.set_visible(False)
+            red_patch = mpatches.Patch(color='red', label='Spin Down')
+            blue_patch = mpatches.Patch(color='blue', label='Spin Up')
+            plt.legend(handles=[red_patch,blue_patch])
             im = ax.imshow(self.cache[0],cmap=cols)
             def animate(i):
                 im.set_array(self.cache[i])
@@ -241,7 +261,6 @@ class Lattice:
 
             a = animation.FuncAnimation(fig,animate,frames=steps,interval=1)
             plt.show()
-            a.save("sim.gif",fps=60)
         else:
             print("Make sure to run a simulation first")
 
