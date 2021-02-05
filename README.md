@@ -29,7 +29,7 @@ Dynamic: model to animate (formatted as g or k)
 sweeps: number of sweeps to animate for
 e.g.
 
-python animation.py 50 50 1 g 1000
+`python animation.py 50 50 1 g 1000`
 
 The model will prerender the frames of the animation and will play the number
 of sweeps on loop until the window is closed. The file does not save the animation to prevent potential issues
@@ -50,7 +50,7 @@ runs: number of full sweeps
 tau: autocorrelation time
 e.g.
 
-python simulate.py 50 50 1 3 20 10_000 10
+`python simulate.py 50 50 1 3 20 10_000 10`
 
 On completion, the file will generate two JSON files Glauber_Data.json and Kawasaki_Data.json, the format of
 which is explained in 3.1. 
@@ -88,7 +88,7 @@ method: which modelling method to use (g or k)
 error_method: which error method to use (b or j)
 e.g.
 
-python plot.py g b
+`python plot.py g b`
 
 the file will present all plots in a single image and save the image as a png on completion. Error bars are marked
 on the graph using the user specified and the critical temperature is marked on the graph in green.
