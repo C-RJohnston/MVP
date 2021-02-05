@@ -9,7 +9,7 @@ Contents
 1. Prerequisites
 2. Animating the model
 3. Taking measurements
--3.1 File format
+3.1. File format
 4. Plotting results
 
 1.Prerequisites
